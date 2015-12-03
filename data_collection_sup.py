@@ -144,19 +144,20 @@ def per_season_cumsum(df,col_list):
     return cumsum_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'C_' + x,col_list))))
 
 
-def get_player_seasons(player_name, season1,season2):
-    player_df = (df85_15[df85_15.PLAYER_NAME == "Kobe Bryant"].groupby(["PLAYER_NAME","SEASON_ID"])
+def get_player_seasons(player_name, season1,season2,full_df):
+    player_df = (full_df[full_df.PLAYER_NAME == player_name].groupby(["PLAYER_NAME","SEASON_ID"])
                                 .apply(lambda x: pd.DataFrame(map(lambda y: calc_ngame_avg(x.sort_values("GAME_DATE"),["AST","REB","PTS","OPP_ELO","TOV","STL","BLK"],y,3),x.GAME_DATE)))).reset_index().drop('level_2',axis = 1)
-    player_df = pd.merge(player_df,df85_15[df85_15.PLAYER_NAME == "Kobe Bryant"][["GAME_DATE","FANTASY_PTS"]])
+    player_df = pd.merge(player_df,full_df[full_df.PLAYER_NAME == player_name][["GAME_DATE","FANTASY_PTS"]])
     player_df2 = player_df.set_index('GAME_DATE')
     fantasy_resp = player_df2.groupby('SEASON_ID').apply(lambda x: x['FANTASY_PTS'].map(lambda y: 1 if y > x.FANTASY_PTS.mean() else 0)).reset_index().rename(columns={'FANTASY_PTS':'FANTASY_RESP'})
     player_df2 = pd.merge(player_df2,fantasy_resp)
     fst_season = season1 + 20000
     lst_season = season2 + 20000
-    player_df_final = player_df2[(player_df2.SEASON_ID <= fst_season) & (player_df2.SEASON_ID >= lst_season)].sort_values('SEASON_ID')
+    player_df_final = player_df2[(player_df2.SEASON_ID <= lst_season) & (player_df2.SEASON_ID >= fst_season)].sort_values('SEASON_ID')
     return (player_df_final, np.array(player_df_final.SEASON_ID < lst_season))
 
-df,mask = get_player_seasons("Roy Hibbert",2010,2013) 
+df,mask = get_player_seasons("Roy Hibbert",2010,2013,df85_15) 
+df.head()
 from sklearn.cross_validation import train_test_split
 #train_test_split(xrange(df.shape[0]), train_size=0.7)
 mask.shape,mask.sum()
