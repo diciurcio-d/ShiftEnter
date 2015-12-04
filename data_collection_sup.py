@@ -202,7 +202,7 @@ gs=GridSearchCV(clfsvm, param_grid={'C':cs,'gamma':gammas}, cv=5)
 gs.fit(Xmatrix_train, Yresp_train)
 print "BEST", gs.best_params_, gs.best_score_, gs.grid_scores_
 
-#calculate the accuracy here
+#calculate the accuracy here, bullshit
 best = gs.best_estimator_
 best.fit(Xmatrix_train, Yresp_train)
 best.score(Xmatrix_test, Yresp_test)
