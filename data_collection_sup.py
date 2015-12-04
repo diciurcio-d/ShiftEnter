@@ -134,9 +134,8 @@ def rolling_cols(df,col_list,ngames,rolling_kind):
     return rolling_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'R_' + x,col_list))))
 
 def add_game_date_pts_col(df,game_date_col,fantasy_pts_col):
-   df["GAME_DATE"] = game_date_col
-   df["FANTASY_PTS"] = fantasy_pts_col
-   return df
+   new_df = pd.concat([df,game_date_col], axis = 1)
+   return new_df
 
 def per_season_cumsum(df,col_list):
     cumsum_df = (df.groupby(["PLAYER_NAME","SEASON_ID"])
@@ -147,6 +146,9 @@ def per_season_cummean(df,col_list):
     cumsum_df = (df.groupby(["PLAYER_NAME","SEASON_ID"])
                    .apply(lambda x: add_game_date_pts_col(pd.expanding_mean(x[col_list], min_periods = 2), x.GAME_DATE, x.FANTASY_PTS).reset_index(drop = True)))
     return cumsum_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'C_' + x,col_list))))
+
+
+
 
 
 def get_player_seasons(player_name, season1,season2,full_df):
