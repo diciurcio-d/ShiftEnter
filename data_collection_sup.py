@@ -146,8 +146,12 @@ def per_season_cumsum(df,col_list):
 
 def get_player_seasons(player_name, season1,season2,full_df):
     player_df = (full_df[full_df.PLAYER_NAME == player_name].groupby(["PLAYER_NAME","SEASON_ID"])
-                                .apply(lambda x: pd.DataFrame(map(lambda y: calc_ngame_avg(x.sort_values("GAME_DATE"),["AST","REB","PTS","OPP_ELO","TOV","STL","BLK"],y,3),x.GAME_DATE)))).reset_index().drop('level_2',axis = 1)
-    player_df = pd.merge(player_df,full_df[full_df.PLAYER_NAME == player_name][["GAME_DATE","FANTASY_PTS"]])
+                                .apply(lambda x: pd.DataFrame(map(lambda y: calc_ngame_avg(x.sort_values("GAME_DATE"),["AST","REB","PTS","TOV","STL","BLK"],y,3),x.GAME_DATE)))).reset_index().drop('level_2',axis = 1)
+    player_df = pd.merge(player_df,full_df[full_df.PLAYER_NAME == player_name][["GAME_DATE","FANTASY_PTS","OPP_ELO"]])
+    player_df['SHIT'] = player_df['OPP_ELO'].map(lambda x: 1 if x < 1400 else 0)
+    player_df['OKAY'] = player_df['OPP_ELO'].map(lambda x: 1 if 1400 <= x < 1600 else 0)
+    player_df['GOOD'] = player_df['OPP_ELO'].map(lambda x: 1 if 1600 <= x < 1700 else 0)
+    player_df['GREAT'] = player_df['OPP_ELO'].map(lambda x: 1 if 1700 <= x else 0)
     player_df2 = player_df.set_index('GAME_DATE')
     fantasy_resp = player_df2.groupby('SEASON_ID').apply(lambda x: x['FANTASY_PTS'].map(lambda y: 1 if y > x.FANTASY_PTS.mean() else 0)).reset_index().rename(columns={'FANTASY_PTS':'FANTASY_RESP'})
     player_df2 = pd.merge(player_df2,fantasy_resp)
@@ -164,7 +168,7 @@ mask.shape,mask.sum()
 
 dftouse = df.copy()
 
-STANDARDIZABLE = map(lambda x: '3D_' + x,["AST","REB","PTS","OPP_ELO","TOV","STL","BLK"])
+STANDARDIZABLE = map(lambda x: '3D_' + x,["AST","REB","PTS","TOV","STL","BLK"])
 from sklearn.preprocessing import StandardScaler
 for col in STANDARDIZABLE:
     print col
@@ -178,12 +182,12 @@ for col in STANDARDIZABLE:
     out[~mask]=outtest
     dftouse[col]=out
 
-lcols = STANDARDIZABLE
+lcols = STANDARDIZABLE + ["SHIT","OKAY","GOOD","GREAT"]
 
-from sklearn.svm import LinearSVC 
-
-clfsvm = LinearSVC()
-cs=[0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+from sklearn import svm 
+clfsvm = svm.SVC(kernel = 'rbf')
+cs=[.01,.1,1,10,100]
+gammas = range(0,101,5)
 Xmatrix=dftouse[lcols].values
 Yresp=dftouse['FANTASY_RESP'].values 
 Xmatrix_train=Xmatrix[mask]
@@ -194,7 +198,7 @@ df[~mask].tail()
 
 #your code here
 from sklearn.grid_search import GridSearchCV
-gs=GridSearchCV(clfsvm, param_grid={'C':cs}, cv=5)
+gs=GridSearchCV(clfsvm, param_grid={'C':cs,'gamma':gammas}, cv=5)
 gs.fit(Xmatrix_train, Yresp_train)
 print "BEST", gs.best_params_, gs.best_score_, gs.grid_scores_
 
@@ -202,3 +206,4 @@ print "BEST", gs.best_params_, gs.best_score_, gs.grid_scores_
 best = gs.best_estimator_
 best.fit(Xmatrix_train, Yresp_train)
 best.score(Xmatrix_test, Yresp_test)
+
