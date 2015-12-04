@@ -143,6 +143,11 @@ def per_season_cumsum(df,col_list):
                    .apply(lambda x: add_game_date_col(x[col_list].cumsum(axis = 0), x.GAME_DATE).reset_index(drop = True)))
     return cumsum_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'C_' + x,col_list))))
 
+def per_season_cummean(df,col_list):
+    cumsum_df = (df.groupby(["PLAYER_NAME","SEASON_ID"])
+                   .apply(lambda x: add_game_date_pts_col(pd.expanding_mean(x[col_list], min_periods = 2), x.GAME_DATE, x.FANTASY_PTS).reset_index(drop = True)))
+    return cumsum_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'C_' + x,col_list))))
+
 
 def get_player_seasons(player_name, season1,season2,full_df):
     player_df = (full_df[full_df.PLAYER_NAME == player_name].groupby(["PLAYER_NAME","SEASON_ID"])
