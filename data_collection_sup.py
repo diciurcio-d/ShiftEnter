@@ -129,12 +129,12 @@ def rolling_cols(df,col_list,ngames,rolling_kind):
     else:
         return None 
     
-    rolling_df = (df.groupby(["PLAYER_NAME","SEASON_ID"])
-                    .apply(lambda x: add_game_date_pts_col(rolling_func((x[col_list],ngames,1)),x.GAME_DATE,x.FANTASY_PTS).reset_index(drop = True)))
+    rolling_df = (df.groupby(["PLAYER_NAME","SEASON_ID","OPP"])
+                    .apply(lambda x: add_game_date_pts_col(rolling_func((x[col_list],ngames,2)),x.GAME_DATE,x.OPP).reset_index(drop = True)))
     return rolling_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'R_' + x,col_list))))
 
-def add_game_date_pts_col(df,game_date_col,fantasy_pts_col):
-   new_df = pd.concat([df,game_date_col], axis = 1)
+def add_game_date_pts_col(df,game_date_col,opp_col):
+   new_df = pd.concat([df,game_date_col,opp_col], axis = 1)
    return new_df
 
 def per_season_cumsum(df,col_list):
@@ -144,12 +144,27 @@ def per_season_cumsum(df,col_list):
 
 def per_season_cummean(df,col_list):
     cumsum_df = (df.groupby(["PLAYER_NAME","SEASON_ID"])
-                   .apply(lambda x: add_game_date_pts_col(pd.expanding_mean(x[col_list], min_periods = 2), x.GAME_DATE, x.FANTASY_PTS).reset_index(drop = True)))
+                   .apply(lambda x: add_game_date_pts_col(pd.expanding_mean(x[col_list], min_periods = 2), x.GAME_DATE, x.OPP).reset_index(drop = True)))
     return cumsum_df.reset_index().drop('level_2',axis = 1).rename(columns=dict(zip(col_list,map(lambda x: 'C_' + x,col_list))))
 
+def enumerate_games(df):
+    new_df = df.copy()
+    new_df["GAME_NUM"] = range(1,len(df.GAME_DATE) + 1)
+    return new_df
 
+def sigmoidfun(x):
+	return 1/(1+np.exp(-0.007*(x-800)))
 
+def fantasy_avg_lastn(player_df,last_n_seasons,seasons):
+    return player_df[[s in seasons[-last_n_seasons:] for s in player_df.SEASON_ID]]['FANTASY_PTS'].mean()    
 
+def true_fantasy_mean(player_df,last_n_seasons):
+    seasons = list(set(player_df.SEASON_ID))
+    lastn_mean = fantasy_avg_lastn(player_df,last_n_seasons,seasons)
+    return player_df.groupby("SEASON_ID").apply(lambda x: x.apply(lambda y: lastn_mean + sigmoidfun(y.MIN) * (y.C_FANTASY_PTS - lastn_mean),axis = 1))
+
+def fantasy_resp(df):
+    return df.groupby('PLAYER_NAME').apply(lambda x: true_fantasy_mean(x,5))
 
 def get_player_seasons(player_name, season1,season2,full_df):
     player_df = (full_df[full_df.PLAYER_NAME == player_name].groupby(["PLAYER_NAME","SEASON_ID"])
