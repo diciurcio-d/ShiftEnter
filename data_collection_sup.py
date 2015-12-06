@@ -60,6 +60,7 @@ by_player = df85_15.groupby("PLAYER_NAME")
 def get_player_bio(name, col_name):
     return float(player_bios_df[player_bios_df.PLAYER_NAME == name][col_name])
 
+df85_15["BIRTHDATE"] = by_player["PLAYER_NAME"].apply(lambda x: x.replace(x.iloc[0],get_player_bio(x.iloc[0],"BIRTHDATE")))
 df85_15["AGE"] = by_player["PLAYER_NAME"].apply(lambda x: x.replace(x.iloc[0],get_player_bio(x.iloc[0],"AGE")))
 df85_15["WEIGHT"] = by_player["PLAYER_NAME"].apply(lambda x: x.replace(x.iloc[0],get_player_bio(x.iloc[0],"WEIGHT")))
 df85_15["HEIGHT"] = by_player["PLAYER_NAME"].apply(lambda x: x.replace(x.iloc[0],get_player_bio(x.iloc[0],"HEIGHT")))
@@ -229,3 +230,6 @@ best = gs.best_estimator_
 best.fit(Xmatrix_train, Yresp_train)
 best.score(Xmatrix_test, Yresp_test)
 
+
+(season_subset(df85_15,2014).groupby('PLAYER_NAME')
+    .apply(lambda x: pd.Series(map(lambda y: (x.loc[x.index.tolist()[y+1]].GAME_DATE - x.loc[x.index.tolist()[y]].GAME_DATE).days,range(x.shape[0] - 1))).reset_index()))
