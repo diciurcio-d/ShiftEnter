@@ -231,5 +231,83 @@ best.fit(Xmatrix_train, Yresp_train)
 best.score(Xmatrix_test, Yresp_test)
 
 
-(season_subset(df85_15,2014).groupby('PLAYER_NAME')
-    .apply(lambda x: pd.Series(map(lambda y: (x.loc[x.index.tolist()[y+1]].GAME_DATE - x.loc[x.index.tolist()[y]].GAME_DATE).days,range(x.shape[0] - 1))).reset_index()))
+def calc_melo(x):
+    MIN_PER = calc_melo_MIN_PER(x)
+    TRUE_PER = calc_melo_TRUE_PER(x)
+    FT_FRQ = calc_melo_FT_FRQ(x)
+    MELO_HT = calc_melo_height(x)
+    MELO_WT = calc_melo_weight(x)
+    MELO_C_MIN = calc_melo_C_MIN(x)
+    MELO_FT_PER = calc_melo_FT_PER(x)
+    MELO_SCORE = MIN_PER + TRUE_PER + FT_FRQ + MELO_HT + MELO_WT +
+    MELO_C_MIN + MELO_FT_PER
+    return MELO_SCORE
+
+def CM_HEIGHT(x):
+    MELO_HT = x['HEIGHT'] * 3
+    return 'MELO_HT',MELO_HT
+
+def CM_WEIGHT(x):
+    MELO_WT = x['WEIGHT'] * 3
+    return 'MELO_WT',MELO_WT
+
+def CM_MIN_PER(x):
+    MIN_PER = (x['SEASON_MIN']/x['GAMES_PLAYED']) * 3.5
+    return 'MELO_MIN_PER',MIN_PER
+
+def CM_TRUE_PER(x):
+    TRUE_PER = ((x['PTS'])/(x['FGA'] + x['FTM'] * 0.44)) * 5
+    return 'MELO_TRUE_PER',TRUE_PER
+
+def CM_FT_FRQ(x):
+    FT_FRQ = (x['FTA']/x['FGA']) * 1.5
+    return 'MELO_FT_FRQ',FT_FRQ
+
+def CM_C_MIN(x):
+    MELO_C_MIN = x['SEASON_MIN'] * 1.5
+    return 'MELO_C_MIN',MELO_C_MIN
+
+def CM_FT_PER(x):
+    MELO_FT_PER = x['FT_PCT'] * 2.5
+    return 'MELO_FT_PER',MELO_FT_PER
+
+def fab_melo(player):
+    root = df85_15[df85_15.PLAYER_NAME == player].sort_values('GAME_DATE')
+    #new_root = root.groupby("SEASON_ID").apply(lambda x: calc_melo(x)).reset_index().rename(columns={0:'FAB_MELO_SCORE'})
+    #new_root['MELO_HEIGHT'] = calc_melo_height(root)
+    #new_root['MELO_WEIGHT'] = calc_melo_weight(root)
+    #new_root['MELO_C_MIN'] = calc_melo_C_MIN(root)
+    #new_root['PLAYER_NAME'] = [player] * new_root.shape[0]
+    calc_melo_funcs = [CM_HEIGHT, CM_WEIGHT, CM_MIN_PER,CM_TRUE_PER,CM_FT_FRQ,CM_C_MIN,CM_FT_PER]
+    return root.groupby('SEASON_ID').apply(lambda x: pd.DataFrame(dict([('SEASON_ID',x.SEASON_ID),('PLAYER_NAME',x.PLAYER_NAME),('GAME_DATE',x.GAME_DATE)] + map(lambda y: y(x),calc_melo_funcs))))
+
+fab_melo("Kobe Bryant")
+store_df = []
+players = set(season_subset(df85_15,1996,2015)['PLAYER_NAME'])
+for player in players:
+    store_df.append(fab_melo(player))
+FAB_MELO = pd.concat(store_df,axis = 0)
+FAB_MELO
+
+
+def get_player_seasons(player_name, season1,season2,full_df,ewma_colresp, ewma_colfeat):
+    ewma_pos = full_df.groupby(["OPP",'SEASON_ID',"POSITION","GAME_DATE"]).apply(lambda x: x.FANTASY_PTS.sum()) 
+    ewma_pos_df_temp = ewma_pos.reset_index().rename(columns={0:'TOT_OPP_POS'}).sort_values('GAME_DATE').groupby(["OPP",'SEASON_ID',"POSITION"]).apply(lambda x: pd.DataFrame(zip(x.GAME_DATE,np.log(pd.ewma(x.TOT_OPP_POS, span = 3).shift(1) + 1)), index = range(x.shape[0]))).rename(columns={0:'GAME_DATE',1:'EWMA_OPP_POS'}).reset_index(level = [0,1,2])
+    ewma_pos_df = pd.merge(full_df,ewma_pos_df_temp,left_on=['OPP','GAME_DATE','POSITION','SEASON_ID'], right_on=['OPP','GAME_DATE','POSITION','SEASON_ID'])
+    
+    player_df = ewma_pos_df[ewma_pos_df.PLAYER_NAME == player_name].copy()
+    player_df['SHIT'] = player_df['OPP_ELO'].map(lambda x: 1 if x < 1400 else 0)
+    player_df['OKAY'] = player_df['OPP_ELO'].map(lambda x: 1 if 1400 <= x < 1600 else 0)
+    player_df['GOOD'] = player_df['OPP_ELO'].map(lambda x: 1 if 1600 <= x < 1700 else 0)
+    player_df['GREAT'] = player_df['OPP_ELO'].map(lambda x: 1 if 1700 <= x else 0)
+    player_df2 = pd.concat([player_df.reset_index(drop = True),player_df.groupby("SEASON_ID").apply(lambda x: np.log(pd.ewma(x[ewma_colresp], span = 3).shift(1) + 1).reset_index().drop('index',axis=1).rename(columns={ewma_colresp:'EWMA_LOG_' + ewma_colresp})).reset_index(drop = True)],axis = 1)
+    for ewma_col in ewma_colfeat:
+        player_df2['EWMA_LOG_' + ewma_col] = player_df2.groupby("SEASON_ID").apply(lambda x: np.log(pd.ewma(x[ewma_col], span = 3).shift(1) + 1).reset_index().drop('index',axis=1).rename(columns={ewma_col:'EWMA_LOG_' + ewma_col})).reset_index(drop = True)
+    resp = player_df2.groupby('SEASON_ID').apply(lambda x: x.apply(lambda y: 1 if abs(np.log(y[ewma_colresp] + 1) - y['EWMA_LOG_' + ewma_colresp]) < .2 else 0, axis = 1).reset_index().drop('index',axis=1).rename(columns={0: ewma_colresp + '_RESP'})).reset_index(drop = True)
+    player_df3 = pd.concat([player_df2,resp], axis = 1)
+    fst_season = season1 + 20000
+    lst_season = season2 + 20000
+    player_df_final = player_df3[(player_df3.SEASON_ID <= lst_season) & (player_df3.SEASON_ID >= fst_season)].dropna()
+    return player_df_final, np.array(player_df_final.SEASON_ID < lst_season)
+
+    
