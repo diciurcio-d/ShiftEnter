@@ -230,7 +230,6 @@ best = gs.best_estimator_
 best.fit(Xmatrix_train, Yresp_train)
 best.score(Xmatrix_test, Yresp_test)
 
-
 def calc_melo(x):
     MIN_PER = calc_melo_MIN_PER(x)
     TRUE_PER = calc_melo_TRUE_PER(x)
@@ -310,4 +309,110 @@ def get_player_seasons(player_name, season1,season2,full_df,ewma_colresp, ewma_c
     player_df_final = player_df3[(player_df3.SEASON_ID <= lst_season) & (player_df3.SEASON_ID >= fst_season)].dropna()
     return player_df_final, np.array(player_df_final.SEASON_ID < lst_season)
 
+def classify_players_ondate(df,game_date, ewma_colresp, ewma_colfeats):
+    players = list(set(df[df.GAME_DATE == game_date]['PLAYER_NAME']))
+    sub_df = df[(df.GAME_DATE <= game_date) & (df.SEASON_ID >= season1)]
+    ewma_pos = sub_df.groupby(["OPP",'SEASON_ID',"POSITION","GAME_DATE"]).apply(lambda x: x.FANTASY_PTS.sum()) 
+    ewma_pos_df_temp = (ewma_pos.reset_index().rename(columns={0:'TOT_OPP_POS'})
+                                .sort_values('GAME_DATE')
+                                .groupby(["OPP",'SEASON_ID',"POSITION"])
+                                .apply(lambda x: 
+                                    pd.DataFrame(zip(x.GAME_DATE,np.log(pd.ewma(x.TOT_OPP_POS, span = 3).shift(1) + 1)), 
+                                    index = range(x.shape[0])))
+                                .rename(columns={0:'GAME_DATE',1:'EWMA_OPP_POS'})
+                                .reset_index(level = [0,1,2]))
+    ewma_pos_df = (pd.merge(sub_df,ewma_pos_df_temp,left_on=['OPP','GAME_DATE','POSITION','SEASON_ID'], 
+                                                    right_on=['OPP','GAME_DATE','POSITION','SEASON_ID']))
+
+    store_df = []
+    for player in players[:2]:
+        print player
+    store_df.append(reduce_picks(player,game_date, ewma_pos_df, ewma_colresp, ewma_colfeats))
+return pd.concat(store_df,axis = 0)
+
+
+league_avg_df = ewma_pos_df.groupby(["SEASON_ID",'POSITION']).apply(lambda x: x['EWMA_OPP_POS'].mean()).reset_index().rename(columns={0:'LEAGUE_AVG_POS'})
+nan_dict = dict(reduce(lambda x,y: x + y.items(),[{(k1,k2):v} for k1,k2,v in league_avg_df.to_records(index = False)], []))
+ewma_pos_df.loc[pd.isnull(ewma_pos_df['EWMA_OPP_POS']),'EWMA_OPP_POS'] = ewma_pos_df[pd.isnull(ewma_pos_df['EWMA_OPP_POS'])].apply(lambda x: nan_dict[x.SEASON_ID,x.POSITION], axis = 1)
+
+def CM_HEIGHT(x):
+    MELO_HT = x['HEIGHT'] * 4.5
+    return 'MELO_HT',MELO_HT
+
+def CM_WEIGHT(x):
+    MELO_WT = x['WEIGHT'] * 2.0
+    return 'MELO_WT',MELO_WT
+
+def CM_CAREER_MINUTES(x):
+    MELO_CAREER_MIN = x['SEASON_MIN'] * 2.5
+    return 'MELO_CAREER_MIN', MELO_CAREER_MIN
+
+def CM_AGE(x):
+    MELO_AGE = x['AGE']
+    return 'MELO_AGE', MELO_AGE
+
+def CM_MIN_PER(x):
+    MIN_PER = x['MIN'] * 4.5
+    return 'MELO_MIN_PER',MIN_PER
+
+def CM_MIN_TOT(x):
+    MIN_TOT = (x['MIN'] * x['GP']) * 7
+    return 'MELO_MIN_TOT', MIN_TOT
+
+def CM_TRUE_PER(x):
+    TRUE_PER = x['TS_PCT'] * 6
+    return 'MELO_TRUE_PER',TRUE_PER
+
+def CM_USG_PER(x):
+    USG_PER = x['USG_PCT'] * 6
+    return 'MELO_USG_PER',USG_PER
+
+def CM_AST_PER(x):
+    AST_PER = x['AST_PCT'] * 5
+    return 'MELO_AST_PCT', AST_PER
+
+def CM_TO_PER(x):
+    TO_PER= x['TM_TOV_PCT'] * 2.5
+    return 'MELO_TO_PCT', TO_PER
+
+def CM_REB_PER(x):
+    REB_PER = x['REB_PCT'] * 5
+    return 'MELO_REB_PCT', REB_PER
+
+def CM_OFF_PM(x):
+    OFF_PM= x['OFF_RATING'] * 3
+    return 'OFF_PM', OFF_PM
+
+def CM_DF_PM(x):
+    DEF_PM= x['DEF_RATING'] * 3
+    return 'DEF_PM', DEF_PM
+
+def CM_3FEQ(x):
+    MELO_3FEQ = x['3PT_FEQ'] * 3.5
+    return 'MELO_3FEQ',MELO_3FEQ
+
+def CM_FT_PER(x):
+    MELO_FT_PER = x['FT_PER'] * 3.5
+    return 'MELO_FT_PER',MELO_FT_PER
+
+def fab_melo(player, comboMELO):
+    root = comboMELO[comboMELO.PLAYER_NAME == player].sort_values('PLAYER_NAME')
+    calc_melo_funcs = [CM_WEIGHT, CM_HEIGHT, CM_MIN_PER,CM_CAREER_MINUTES, CM_3FEQ, CM_MIN_TOT, CM_TRUE_PER, CM_USG_PER, CM_AST_PER, CM_TO_PER, CM_REB_PER, CM_OFF_PM, CM_DF_PM,CM_FT_PER,CM_AGE]
+    result = root.groupby('SEASON_ID').apply(lambda x: pd.DataFrame(dict([('SEASON_ID',x.SEASON_ID),('PLAYER_NAME',x.PLAYER_NAME)] + map(lambda y: y(x),calc_melo_funcs))))
+    return result
+
+
+def zscore(col):
+    return (col - col.mean())/col.std(ddof=0)
     
+store_df = []
+melo_advanced_df = pd.read_csv("./usage_stats/comboMELO.csv") 
+players = set(season_subset(df85_15,1996,2015)['PLAYER_NAME'])
+for player in players:
+    store_df.append(fab_melo(player,melo_advanced_df))
+FAB_MELO = pd.concat(store_df,axis = 0)
+melo_cols = ["MELO_MIN_PER", "MELO_MIN_TOT", "DEF_PM","OFF_PM", "MELO_AST_PCT", "MELO_REB_PCT", "MELO_TO_PCT","MELO_USG_PER", "MELO_TRUE_PER","MELO_3FEQ","MELO_FT_PER","MELO_CAREER_MIN","MELO_WT","MELO_HT"]
+weights = dict(zip(melo_cols,[4.5,7.0,3.0,3.0,5.0,5.0,2.5,6.0,6.0,3.5,3.5,2.5,2,4.5]))
+FAB_MELO[melo_cols] = FAB_MELO[melo_cols].apply(zscore, axis =0)
+get_top_ten(FAB_MELO[FAB_MELO.AGE == 34],weights,"Michael Jordan")
+len(melo_cols)
