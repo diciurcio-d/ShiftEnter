@@ -1,0 +1,53 @@
+.container p {	
+	color: white;
+}
+
+.container .row p {	
+	color: black;
+}
+
+.container h1 {
+	color: white;
+	text-shadow: 2px 2px 0 #000000;
+}
+
+.jumbotron{
+	background-size: contain;
+}
+
+.centered
+{
+    text-align:center;
+}
+.container footer .left{
+	float: left;
+	color: black;
+}
+.container footer .right{
+	float: right;
+	color: black;
+}
+
+.container footer{
+  position: absolute;
+  bottom: 0;
+  width: 80%;
+  /* Set the fixed height of the footer here */
+  height: 60px;
+  background-color: white;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+body {
+  /* Margin bottom by footer height */
+  margin-bottom: 60px;
+}
+
+.img-circle{
+	height: 140px;
+	width: 140px;
+	border: solid;
+}
